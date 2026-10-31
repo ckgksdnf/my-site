@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>표본평균 신뢰구간 계산기</title>
+  <style>
+    :root { --ink:#17303a; --muted:#5b6b72; --paper:#f5f7f5; --panel:#fff; --line:#d7dfda; --accent:#176b68; --soft:#e5f3ef; --warm:#a64e2c; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:"Malgun Gothic","Apple SD Gothic Neo",Arial,sans-serif; line-height:1.6; }
+    header { padding:42px 20px 36px; color:#fff; background:linear-gradient(120deg,#123e45,#176b68); }
+    header div, main { max-width:920px; margin:auto; }
+    h1 { margin:0 0 8px; font-size:clamp(1.55rem,4vw,2.35rem); letter-spacing:-.04em; }
+    header p { margin:0; opacity:.9; }
+    main { padding:26px 20px 48px; }
+    h2 { margin:0 0 13px; font-size:1.16rem; }
+    .card { margin-bottom:17px; padding:21px; background:var(--panel); border:1px solid var(--line); border-radius:13px; }
+    .intro { border-left:5px solid var(--accent); }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
+    label { display:block; color:var(--muted); font-size:.9rem; font-weight:700; }
+    input { width:100%; margin-top:5px; padding:10px 11px; color:var(--ink); background:#fff; border:1px solid #bbc8c2; border-radius:8px; font:inherit; }
+    input:focus { outline:3px solid #c6e6de; border-color:var(--accent); }
+    button { margin-top:14px; padding:11px 18px; color:#fff; background:var(--accent); border:0; border-radius:8px; font:inherit; font-weight:700; cursor:pointer; }
+    button:hover { background:#105957; }
+    .hint, .message { margin:8px 0 0; color:var(--muted); font-size:.88rem; }
+    .message { color:#825f13; min-height:1.5em; }
+    .results { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .metric { padding:14px; border-radius:10px; background:var(--soft); }
+    .metric.warm { background:#fbefea; }
+    .metric span { display:block; color:var(--muted); font-size:.82rem; }
+    .metric strong { display:block; margin-top:2px; font-size:1.14rem; letter-spacing:-.03em; }
+    .metric small { display:block; margin-top:2px; color:var(--muted); }
+    .formula { margin:0; padding:11px 13px; background:#f1f4f2; border-radius:8px; font-family:Georgia,serif; }
+    .formula + .formula { margin-top:8px; }
+    .empty { margin:0; color:var(--muted); }
+    footer { color:var(--muted); font-size:.84rem; }
+    @media (max-width:700px) {
+      .grid,.results { grid-template-columns:1fr; }
+      main { padding:18px 14px 36px; }
+      .card { padding:18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>표본평균 신뢰구간 계산기</h1>
+      <p>표본평균, 표본표준편차, 표본의 크기로 모평균의 신뢰구간을 추정합니다.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="card intro">
+      <h2>계산 방법</h2>
+      <p>표본평균 x̄는 모평균 m을 추정하는 값입니다. 모평균 m은 알 수 없으므로 입력하지 않으며, 표본표준편차 s를 이용해 표본평균의 표준오차를 s/√n으로 추정합니다.</p>
+    </section>
+
+    <section class="card">
+      <h2>입력값</h2>
+      <div class="grid">
+        <label>표본평균 x̄ (kPa)
+          <input id="mean" type="number" step="0.001" placeholder="예: 151.897">
+        </label>
+
+        <label>한 표본의 크기 n
+          <input id="n" type="number" min="30" step="1" value="36">
+        </label>
+
+        <label>개별 측정값의 표본표준편차 s (kPa)
+          <input id="s" type="number" min="0.001" step="0.001" placeholder="예: 0.680">
+        </label>
+      </div>
+
+      <p class="hint">n은 30 이상이어야 합니다. 여기서 s는 개별 압력 측정값의 표본표준편차입니다.</p>
+      <button id="calculate" type="button">신뢰구간 계산</button>
+      <p id="message" class="message"></p>
+    </section>
+
+    <section class="card">
+      <h2>계산 결과</h2>
+      <div id="result" class="results">
+        <p class="empty">값을 입력한 뒤 신뢰구간 계산을 누르세요.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>사용한 식</h2>
+      <p class="formula">표본평균의 표준편차 추정값: SE(X̄) = s / √n</p>
+      <p class="formula">90% 신뢰구간 ≈ x̄ ± 1.645 × s / √n</p>
+      <p class="formula">95% 신뢰구간 ≈ x̄ ± 1.96 × s / √n</p>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const fmt = (value, digits = 3) =>
+      Number.isFinite(value) ? value.toFixed(digits) : "계산 불가";
+
+    $("calculate").addEventListener("click", () => {
+      const mean = Number($("mean").value);
+      const n = Number($("n").value);
+      const s = Number($("s").value);
+      const message = $("message");
+
+      message.textContent = "";
+
+      if (!(Number.isFinite(mean) && Number.isInteger(n) && s > 0)) {
+        message.textContent = "세 입력값을 모두 올바르게 입력하세요.";
+        return;
+      }
+
+      if (n < 30) {
+        message.textContent = "표본의 크기 n은 30 이상으로 입력하세요.";
+        return;
+      }
+
+      const se = s / Math.sqrt(n);
+
+      const lower90 = mean - 1.645 * se;
+      const upper90 = mean + 1.645 * se;
+
+      const lower95 = mean - 1.96 * se;
+      const upper95 = mean + 1.96 * se;
+
+      $("result").innerHTML = `
+        <div class="metric">
+          <span>입력한 표본평균 x̄</span>
+          <strong>${fmt(mean)} kPa</strong>
+          <small>모평균 m의 추정값</small>
+        </div>
+
+        <div class="metric">
+          <span>표본의 크기 n</span>
+          <strong>${n}개</strong>
+          <small>같은 조건에서 반복한 측정 횟수</small>
+        </div>
+
+        <div class="metric">
+          <span>표준오차 SE(X̄)</span>
+          <strong>${fmt(se)} kPa</strong>
+          <small>s / √n</small>
+        </div>
+
+        <div class="metric warm">
+          <span>90% 신뢰구간</span>
+          <strong>[${fmt(lower90)}, ${fmt(upper90)}]</strong>
+          <small>kPa</small>
+        </div>
+
+        <div class="metric warm">
+          <span>95% 신뢰구간</span>
+          <strong>[${fmt(lower95)}, ${fmt(upper95)}]</strong>
+          <small>kPa</small>
+        </div>
+      `;
+    });
+  </script>
+</body>
+</html>
